@@ -64,194 +64,194 @@
   </div>
 
   <script>
-/* ====== KONFIG ====== */
-const SHEET_ID = "1990d2qXEm1HqUMDvSCGD-tRKLWSPp7UdigBIpLg7reM";
-// Tab 2022–2025 (bisa pakai index "2","3","4","5" atau nama tab)
-const SHEETS = ["2022","2023","2024","2025"];
+  /* ====== KONFIG ====== */
+  const SHEET_ID = "1990d2qXEm1HqUMDvSCGD-tRKLWSPp7UdigBIpLg7reM";
+  const SHEETS = ["2022","2023","2024","2025"]; // pakai nama tab biar aman
 
-/* ====== UTIL ====== */
-async function fetchSheet(sheet) {
-  const url = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(sheet)}`;
-  try {
-    const resp = await fetch(url, { cache: "no-store" });
-    if (!resp.ok) throw new Error();
-    const rows = await resp.json();
-    // kalau sheet kosong, tetap kembalikan array kosong
-    return Array.isArray(rows) ? rows : [];
-  } catch {
-    console.warn("Lewati sheet (belum publish / tak ditemukan):", sheet);
-    return []; // jangan bikin gagal total, cukup lewati
-  }
-}
-
-// cari key secara case-insensitive, abaikan spasi/underscore
-function pickKey(rows, candidates) {
-  const norm = s => String(s).toLowerCase().replace(/[\s_]+/g,'');
-  const candNorm = candidates.map(norm);
-  for (const r of rows) {
-    for (const k of Object.keys(r)) {
-      const kn = norm(k);
-      const i = candNorm.indexOf(kn);
-      if (i !== -1) return k; // k = nama persis di sheet
+  /* ====== UTIL ====== */
+  async function fetchSheet(sheet) {
+    const url = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(sheet)}`;
+    try {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error();
+      const rows = await resp.json();
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      console.warn("Lewati sheet (belum publish / tak ditemukan):", sheet);
+      return [];
     }
   }
-  // try contains
-  for (const r of rows) {
-    for (const k of Object.keys(r)) {
-      const kn = norm(k);
-      if (candNorm.some(c => kn.includes(c) || c.includes(kn))) return k;
+
+  // cari key secara case-insensitive, abaikan spasi/underscore
+  function pickKey(rows, candidates) {
+    const norm = s => String(s).toLowerCase().replace(/[\s_]+/g,'');
+    const candNorm = candidates.map(norm);
+    for (const r of rows) {
+      for (const k of Object.keys(r)) {
+        const kn = norm(k);
+        const i = candNorm.indexOf(kn);
+        if (i !== -1) return k; // nama persis di sheet
+      }
     }
+    for (const r of rows) {
+      for (const k of Object.keys(r)) {
+        const kn = norm(k);
+        if (candNorm.some(c => kn.includes(c) || c.includes(kn))) return k;
+      }
+    }
+    return candidates[0];
   }
-  return candidates[0]; // fallback
-}
 
-function normYear(row) {
-  const t1 = row["Tahun"] ?? row["TAHUN"] ?? row["tahun"];
-  if (t1) return String(t1).trim();
-  const ta = row["TAHUN AJARAN"] ?? row["Tahun Ajaran"];
-  if (ta) {
-    const m = String(ta).match(/\d{4}/);
-    if (m) return m[0];
+  function normYear(row) {
+    const t1 = row["Tahun"] ?? row["TAHUN"] ?? row["tahun"];
+    if (t1) return String(t1).trim();
+    const ta = row["TAHUN AJARAN"] ?? row["Tahun Ajaran"];
+    if (ta) {
+      const m = String(ta).match(/\d{4}/);
+      if (m) return m[0];
+    }
+    return "";
   }
-  return "";
-}
 
-function countBy(arr, key) {
-  const map = {};
-  for (const d of arr) {
-    const v = (d[key] ?? "").toString().trim();
-    if (!v) continue;
-    map[v] = (map[v] || 0) + 1;
+  function countBy(arr, key) {
+    const map = {};
+    for (const d of arr) {
+      const v = (d[key] ?? "").toString().trim();
+      if (!v) continue;
+      map[v] = (map[v] || 0) + 1;
+    }
+    return map;
   }
-  return map;
-}
 
-/* ====== LOAD + NORMALISASI ====== */
-async function loadAllData() {
-  const all = await Promise.all(SHEETS.map(fetchSheet));
-  const merged = all.flat();
+  /* ====== LOAD + NORMALISASI ====== */
+  async function loadAllData() {
+    const all = await Promise.all(SHEETS.map(fetchSheet));
+    const merged = all.flat();
+    const sample = merged.slice(0, 100);
+    const keys = {
+      nama:    pickKey(sample, ["NAMA","Nama","Nama Lengkap","NAMA LENGKAP"]),
+      unit:    pickKey(sample, ["UNIT KERJA","Unit Kerja","OPD"]),
+      jenjang: pickKey(sample, ["JENJANG PENDIDIKAN","Jenjang Pendidikan","Jenjang"]),
+      lembaga: pickKey(sample, ["LEMBAGA PENDIDIKAN","Lembaga Pendidikan","Perguruan Tinggi","Universitas"]),
+      prodi:   pickKey(sample, ["PROGRAM STUDI","Program Studi","PRODI","Program"]),
+      ket:     pickKey(sample, ["KETERANGAN","Keterangan","KET"])
+    };
 
-  // deteksi header berdasarkan sample
-  const sample = merged.slice(0, 100);
-  const keys = {
-    nama:    pickKey(sample, ["NAMA","Nama","Nama Lengkap","NAMA LENGKAP"]),
-    unit:    pickKey(sample, ["UNIT KERJA","Unit Kerja","OPD"]),
-    jenjang: pickKey(sample, ["JENJANG PENDIDIKAN","Jenjang Pendidikan","Jenjang"]),
-    lembaga: pickKey(sample, ["LEMBAGA PENDIDIKAN","Lembaga Pendidikan","Perguruan Tinggi","Universitas"]),
-    prodi:   pickKey(sample, ["PROGRAM STUDI","Program Studi","PRODI","Program"]),
-    ket:     pickKey(sample, ["KETERANGAN","Keterangan","KET"])
-  };
+    const normalized = merged.map(r => ({
+      Nama:    r[keys.nama]    ?? "",
+      Unit:    r[keys.unit]    ?? "",
+      Jenjang: r[keys.jenjang] ?? "",
+      Lembaga: r[keys.lembaga] ?? "",
+      Prodi:   r[keys.prodi]   ?? "",
+      Ket:     r[keys.ket]     ?? "",
+      Tahun:   normYear(r)
+    })).filter(x => x.Unit || x.Lembaga || x.Nama);
 
-  // normalisasi → pakai properti konsisten
-  const normalized = merged.map(r => ({
-    Nama:      r[keys.nama]    ?? "",
-    Unit:      r[keys.unit]    ?? "",
-    Jenjang:   r[keys.jenjang] ?? "",
-    Lembaga:   r[keys.lembaga] ?? "",
-    Prodi:     r[keys.prodi]   ?? "",
-    Ket:       r[keys.ket]     ?? "",
-    Tahun:     normYear(r)
-  }))
-  .filter(x => x.Unit || x.Lembaga || x.Nama); // buang baris kosong
+    return normalized;
+  }
 
-  return normalized;
-}
+  /* ====== KPI & CHARTS ====== */
+  function renderKPIs(data) {
+    document.getElementById("kpiTotal").textContent   = data.length;
+    document.getElementById("kpiUnit").textContent    =
+      new Set(data.map(d => (d.Unit||"").trim()).filter(Boolean)).size;
+    document.getElementById("kpiLembaga").textContent =
+      new Set(data.map(d => (d.Lembaga||"").trim()).filter(Boolean)).size;
+  }
 
-/* ====== KPI & CHARTS ====== */
-function renderKPIs(data) {
-  document.getElementById("kpiTotal").textContent   = data.length;
-  document.getElementById("kpiUnit").textContent    =
-    new Set(data.map(d => (d.Unit||"").trim()).filter(Boolean)).size;
-  document.getElementById("kpiLembaga").textContent =
-    new Set(data.map(d => (d.Lembaga||"").trim()).filter(Boolean)).size;
-}
+  function drawCharts(data) {
+    // 1) Program Studi (pie)
+    const prodi = countBy(data, "Prodi");
+    Plotly.react("prodiPie", [{
+      labels: Object.keys(prodi),
+      values: Object.values(prodi),
+      type: "pie"
+    }], { margin:{t:10} });
 
-function drawCharts(data) {
-  // 1) Program Studi (pie)
-  const prodi = countBy(data, "Prodi");
-  Plotly.react("prodiPie", [{
-    labels: Object.keys(prodi),
-    values: Object.values(prodi),
-    type: "pie"
-  }], { margin:{t:10} });
+    // 2) Jenjang Pendidikan (bar)
+    const jenj = countBy(data, "Jenjang");
+    const jLabels = Object.keys(jenj);
+    const jVals   = jLabels.map(k => jenj[k]);
+    Plotly.react("jenjangBar", [{
+      x: jLabels, y: jVals, type:"bar",
+      text: jVals.map(String), textposition:"outside",
+      hovertemplate:"%{x}<br>%{y} peserta<extra></extra>"
+    }], {
+      margin:{t:10,r:10,b:40,l:50},
+      xaxis:{title:"Jenjang", tickangle:-15},
+      yaxis:{title:"Jumlah", rangemode:"tozero"},
+      uniformtext:{minsize:10,mode:"hide"}
+    });
 
-  // 2) Jenjang Pendidikan (bar)
-  const jenj = countBy(data, "Jenjang");
-  const jLabels = Object.keys(jenj);
-  const jVals   = jLabels.map(k => jenj[k]);
-  Plotly.react("jenjangBar", [{
-    x: jLabels, y: jVals, type:"bar",
-    text: jVals.map(String), textposition:"outside",
-    hovertemplate:"%{x}<br>%{y} peserta<extra></extra>"
-  }], {
-    margin:{t:10,r:10,b:40,l:50},
-    xaxis:{title:"Jenjang", tickangle:-15},
-    yaxis:{title:"Jumlah", rangemode:"tozero"},
-    uniformtext:{minsize:10,mode:"hide"}
-  });
+    // 3) Lembaga Pendidikan (pie)
+    const lemb = countBy(data, "Lembaga");
+    Plotly.react("lembagaPie", [{
+      labels: Object.keys(lemb),
+      values: Object.values(lemb),
+      type:"pie"
+    }], { margin:{t:10} });
 
-  // 3) Lembaga Pendidikan (pie)
-  const lemb = countBy(data, "Lembaga");
-  Plotly.react("lembagaPie", [{
-    labels: Object.keys(lemb),
-    values: Object.values(lemb),
-    type:"pie"
-  }], { margin:{t:10} });
+    // 4) Keterangan (bar horizontal)
+    const ket = countBy(data, "Ket");
+    const kEntries = Object.entries(ket).sort((a,b)=>b[1]-a[1]);
+    Plotly.react("ketBar", [{
+      x: kEntries.map(e=>e[1]),
+      y: kEntries.map(e=>e[0]),
+      type:"bar", orientation:"h",
+      text: kEntries.map(e=>String(e[1])),
+      textposition:"outside",
+      hovertemplate:"%{y}<br>%{x} peserta<extra></extra>"
+    }], {
+      margin:{l:160,t:10,r:20,b:30},
+      yaxis:{autorange:"reversed"},
+      xaxis:{rangemode:"tozero"}
+    });
+  }
 
-  // 4) Keterangan (bar horizontal)
-  const ket = countBy(data, "Ket");
-  const kEntries = Object.entries(ket).sort((a,b)=>b[1]-a[1]);
-  Plotly.react("ketBar", [{
-    x: kEntries.map(e=>e[1]),
-    y: kEntries.map(e=>e[0]),
-    type:"bar", orientation:"h",
-    text: kEntries.map(e=>String(e[1])),
-    textposition:"outside",
-    hovertemplate:"%{y}<br>%{x} peserta<extra></extra>"
-  }], {
-    margin:{l:160,t:10,r:20,b:30},
-    yaxis:{autorange:"reversed"},
-    xaxis:{rangemode:"tozero"}
-  });
-}
+  /* ====== BOOTSTRAP + FILTER ====== */
+  let fullData = [];
+  let currentData = [];
 
-/* ====== BOOTSTRAP + FILTER ====== */
-<script>
-let fullData = [];
-let currentData = [];
+  function isAll(val) {
+    if (val == null) return true;
+    const v = String(val).trim().toLowerCase();
+    return v === "" || v === "all" || v.includes("semua");
+  }
 
-function isAll(val) {
-  if (val == null) return true;
-  const v = String(val).trim().toLowerCase();
-  return v === "" || v === "all" || v.includes("semua");
-}
+  function setupFilter() {
+    const sel = document.getElementById("yearFilter");
+    const years = Array.from(new Set(fullData.map(d => d.Tahun).filter(Boolean))).sort();
+    sel.innerHTML = '<option value="All">Semua Tahun</option>' +
+      years.map(y => `<option value="${y}">${y}</option>`).join("");
+    sel.value = "All";
 
-function setupFilter() {
-  const sel = document.getElementById("yearFilter");
-  const years = Array.from(new Set(fullData.map(d => d.Tahun).filter(Boolean))).sort();
+    sel.onchange = () => {
+      const val = sel.value;
+      currentData = isAll(val)
+        ? fullData.slice()
+        : fullData.filter(d => String(d.Tahun).trim() === String(val).trim());
+      renderKPIs(currentData);
+      drawCharts(currentData);
+    };
+  }
 
-  // pastikan value opsi ALL benar2 "All" (bukan teks default)
-  sel.innerHTML =
-    '<option value="All">Semua Tahun</option>' +
-    years.map(y => `<option value="${y}">${y}</option>`).join("");
-
-  sel.value = "All"; // set default
-
-  sel.onchange = () => {
-    const val = sel.value;
-    currentData = isAll(val)
-      ? fullData.slice()                                   // reset ke semua
-      : fullData.filter(d => String(d.Tahun).trim() === String(val).trim());
-
-    renderKPIs(currentData);
-    drawCharts(currentData);
-  };
-}
-
-// panggil setelah loadAllData():
-// fullData = await loadAllData(); currentData = fullData.slice(); setupFilter(); renderKPIs(currentData); drawCharts(currentData);
-</script>
-
-
+  (async function init() {
+    try {
+      fullData = await loadAllData();
+      currentData = fullData.slice();
+      setupFilter();
+      renderKPIs(currentData);
+      drawCharts(currentData);
+      // OPTIONAL auto-refresh:
+      // setInterval(async () => {
+      //   fullData = await loadAllData();
+      //   document.getElementById("yearFilter").dispatchEvent(new Event('change'));
+      // }, 10*60*1000);
+    } catch (e) {
+      console.error(e);
+      alert("Gagal memuat data. Pastikan tab 2022–2025 sudah dipublish & header konsisten.");
+    }
+  })();
+  </script>
 </body>
 </html>
