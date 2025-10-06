@@ -216,40 +216,42 @@ function drawCharts(data) {
 }
 
 /* ====== BOOTSTRAP + FILTER ====== */
+<script>
 let fullData = [];
 let currentData = [];
+
+function isAll(val) {
+  if (val == null) return true;
+  const v = String(val).trim().toLowerCase();
+  return v === "" || v === "all" || v.includes("semua");
+}
 
 function setupFilter() {
   const sel = document.getElementById("yearFilter");
   const years = Array.from(new Set(fullData.map(d => d.Tahun).filter(Boolean))).sort();
-  sel.innerHTML = '<option value="All">Semua Tahun</option>' +
+
+  // pastikan value opsi ALL benar2 "All" (bukan teks default)
+  sel.innerHTML =
+    '<option value="All">Semua Tahun</option>' +
     years.map(y => `<option value="${y}">${y}</option>`).join("");
-  sel.value = "All";
+
+  sel.value = "All"; // set default
 
   sel.onchange = () => {
-    const val = (sel.value ?? "").trim();
-    currentData = (val === "All" || val === "")
-      ? fullData.slice()
-      : fullData.filter(d => String(d.Tahun).trim() === String(val));
+    const val = sel.value;
+    currentData = isAll(val)
+      ? fullData.slice()                                   // reset ke semua
+      : fullData.filter(d => String(d.Tahun).trim() === String(val).trim());
+
     renderKPIs(currentData);
     drawCharts(currentData);
   };
 }
 
-(async function init() {
-  try {
-    fullData = await loadAllData();
-    currentData = fullData.slice();
-
-    setupFilter();       // isi dropdown tahun
-    renderKPIs(currentData);
-    drawCharts(currentData);
-  } catch (e) {
-    console.error(e);
-    alert("Gagal memuat data. Pastikan tab 2022–2025 sudah dipublish & header konsisten.");
-  }
-})();
+// panggil setelah loadAllData():
+// fullData = await loadAllData(); currentData = fullData.slice(); setupFilter(); renderKPIs(currentData); drawCharts(currentData);
 </script>
+
 
 </body>
 </html>
