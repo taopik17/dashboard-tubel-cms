@@ -67,14 +67,21 @@
 /* ====== KONFIG ====== */
 const SHEET_ID = "1990d2qXEm1HqUMDvSCGD-tRKLWSPp7UdigBIpLg7reM";
 // Tab 2022–2025 (bisa pakai index "2","3","4","5" atau nama tab)
-const SHEETS = ["2","3","4","5"];
+const SHEETS = ["2022","2023","2024","2025"];
 
 /* ====== UTIL ====== */
 async function fetchSheet(sheet) {
   const url = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(sheet)}`;
-  const resp = await fetch(url, { cache: "no-store" });
-  if (!resp.ok) throw new Error(`Fetch gagal: ${sheet}`);
-  return resp.json();
+  try {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error();
+    const rows = await resp.json();
+    // kalau sheet kosong, tetap kembalikan array kosong
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    console.warn("Lewati sheet (belum publish / tak ditemukan):", sheet);
+    return []; // jangan bikin gagal total, cukup lewati
+  }
 }
 
 // cari key secara case-insensitive, abaikan spasi/underscore
