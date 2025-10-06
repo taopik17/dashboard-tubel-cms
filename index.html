@@ -1,32 +1,32 @@
 <!doctype html>
 <html lang="id">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Tugas Belajar ASN Kab. Ciamis</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 16px; }
-    h1 { margin-bottom: 4px; }
-    .subtitle { color: #555; margin-top: 0; }
-    .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0 16px; }
-    .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 16px 0; }
-    .kpi { border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-    .kpi .label { font-size: 12px; color: #666; }
-    .kpi .value { font-weight: 700; font-size: 28px; line-height: 1.1; }
-    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
-    @media (min-width: 1100px) {
-      .grid { grid-template-columns: 1.1fr 1fr; }
-    }
-    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; }
-    .card h3 { margin: 6px 8px; font-size: 16px; }
-    select { padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
-    .footer { margin-top: 24px; color: #666; font-size: 12px; }
+    :root{--card:#e5e7eb}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px}
+    h1{margin-bottom:4px}
+    .subtitle{color:#555;margin-top:0}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 16px}
+    select{padding:8px 10px;border-radius:8px;border:1px solid #d1d5db}
+    .kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin:16px 0}
+    .kpi{border:1px solid #e5e7eb;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .kpi .label{font-size:12px;color:#666}
+    .kpi .value{font-weight:700;font-size:28px;line-height:1.1}
+    .grid{display:grid;gap:16px;grid-template-columns:1fr}
+    @media (min-width:1100px){.grid{grid-template-columns:1fr 1fr}}
+    .card{border:1px solid #e5e7eb;border-radius:12px;padding:10px}
+    .card h3{margin:6px 8px;font-size:16px}
+    .footer{margin-top:24px;color:#666;font-size:12px}
   </style>
 </head>
 <body>
   <h1>DASHBOARD MONITORING TUGAS BELAJAR</h1>
-  <p class="subtitle">ASN Kabupaten Ciamis • Interaktif (filter berdasarkan tahun)</p>
+  <p class="subtitle">ASN Kabupaten Ciamis • Data live dari Google Spreadsheet</p>
+
   <div class="controls">
     <label for="yearFilter"><b>Filter Tahun:</b></label>
     <select id="yearFilter">
@@ -42,95 +42,203 @@
 
   <div class="grid">
     <div class="card">
-      <h3>Tren Peserta per Tahun</h3>
-      <div id="trendChart"></div>
+      <h3>Program Studi</h3>
+      <div id="prodiPie"></div>
     </div>
     <div class="card">
-      <h3>Distribusi Jenjang Pendidikan</h3>
-      <div id="jenjangPie"></div>
+      <h3>Jenjang Pendidikan</h3>
+      <div id="jenjangBar"></div>
     </div>
     <div class="card">
-      <h3>Top 10 Unit Kerja</h3>
-      <div id="unitBar"></div>
+      <h3>Lembaga Pendidikan</h3>
+      <div id="lembagaPie"></div>
     </div>
     <div class="card">
-      <h3>Top 10 Lembaga Pendidikan</h3>
-      <div id="lembagaBar"></div>
+      <h3>Keterangan</h3>
+      <div id="ketBar"></div>
     </div>
   </div>
 
-  <div class="footer">Sumber data: Google Spreadsheet TUGAS BELAJAR PNS (2022–2025) • Terhubung otomatis</div>
+  <div class="footer">
+    Sumber: Google Sheets (tab 2022–2025) • Otomatis update saat data di spreadsheet berubah
+  </div>
 
   <script>
+  // ==== KONFIG ====
   const SHEET_ID = "1990d2qXEm1HqUMDvSCGD-tRKLWSPp7UdigBIpLg7reM";
-  const SHEETS = ["2","3","4","5"]; // tab 2022–2025
+  // Tab 2022–2025 (bisa pakai nama atau index "2","3","4","5")
+  const SHEETS = ["2","3","4","5"];
 
+  // ==== FETCH & NORMALISASI ====
   async function fetchSheet(sheet) {
-    const url = `https://opensheet.elk.sh/${SHEET_ID}/${sheet}`;
+    const url = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(sheet)}`;
     const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error(`Gagal fetch sheet ${sheet}`);
     return resp.json();
   }
 
-  function normYear(r) {
-    return r["Tahun"] || r["TAHUN"] || (r["TAHUN AJARAN"]?.match(/\d{4}/)?.[0] ?? "");
+  function firstMatchKey(rows, candidates) {
+    // cari key yang ada pada salah satu row
+    for (const c of candidates) {
+      const found = rows.find(r => Object.prototype.hasOwnProperty.call(r, c));
+      if (found) return c;
+    }
+    // fallback: pakai kandidat pertama
+    return candidates[0];
   }
 
-  function normalizeRow(r) {
+  function normYear(row) {
+    const t1 = row["Tahun"] || row["TAHUN"] || row["tahun"];
+    if (t1) return String(t1).trim();
+    const ta = row["TAHUN AJARAN"] || row["Tahun Ajaran"];
+    if (ta) {
+      const m = String(ta).match(/\d{4}/);
+      if (m) return m[0];
+    }
+    return "";
+  }
+
+  function normalizeRow(r, keys) {
     return {
-      "NAMA": r["NAMA"] || r["Nama"] || "",
-      "UNIT KERJA": r["UNIT KERJA"] || r["Unit Kerja"] || "",
-      "JENJANG PENDIDIKAN": r["JENJANG PENDIDIKAN"] || r["Jenjang"] || "",
-      "LEMBAGA PENDIDIKAN": r["LEMBAGA PENDIDIKAN"] || r["Perguruan Tinggi"] || "",
+      "NAMA": r[keys.nama] ?? "",
+      "UNIT KERJA": r[keys.unit] ?? "",
+      "JENJANG PENDIDIKAN": r[keys.jenjang] ?? "",
+      "LEMBAGA PENDIDIKAN": r[keys.lembaga] ?? "",
+      "PROGRAM STUDI": r[keys.prodi] ?? "",
+      "KETERANGAN": r[keys.ket] ?? "",
       "Tahun": normYear(r)
     };
   }
 
   async function loadAllData() {
     const all = await Promise.all(SHEETS.map(fetchSheet));
-    return all.flat().map(normalizeRow).filter(x => x["NAMA"]);
-  }
+    const mergedRaw = all.flat();
 
-  function updateDashboard(rawData) {
-    document.getElementById("kpiTotal").textContent = rawData.length;
-    document.getElementById("kpiUnit").textContent = new Set(rawData.map(d=>d["UNIT KERJA"])).size;
-    document.getElementById("kpiLembaga").textContent = new Set(rawData.map(d=>d["LEMBAGA PENDIDIKAN"])).size;
-
-    const years = Array.from(new Set(rawData.map(d=>d.Tahun))).sort();
-    const sel = document.getElementById("yearFilter");
-    sel.innerHTML = '<option value="All">Semua Tahun</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join("");
-
-    sel.onchange = () => {
-      const val = sel.value;
-      const filtered = val==="All" ? rawData : rawData.filter(d=>d.Tahun===val);
-      drawCharts(filtered);
+    // Tentukan key yang benar berdasar header di sheet
+    const rowsSample = mergedRaw.slice(0, 50); // cukup sample
+    const keys = {
+      nama:    firstMatchKey(rowsSample, ["NAMA","Nama","NAMA LENGKAP","Nama Lengkap"]),
+      unit:    firstMatchKey(rowsSample, ["UNIT KERJA","Unit Kerja","OPD"]),
+      jenjang: firstMatchKey(rowsSample, ["JENJANG PENDIDIKAN","Jenjang Pendidikan","Jenjang"]),
+      lembaga: firstMatchKey(rowsSample, ["LEMBAGA PENDIDIKAN","Lembaga Pendidikan","Perguruan Tinggi","Universitas"]),
+      prodi:   firstMatchKey(rowsSample, ["PROGRAM STUDI","Program Studi","PROGRAM","Program"]),
+      ket:     firstMatchKey(rowsSample, ["KETERANGAN","Keterangan","KET"])
     };
 
-    drawCharts(rawData);
+    const normalized = mergedRaw.map(r => normalizeRow(r, keys))
+      .filter(x => (x["NAMA"] || x["UNIT KERJA"] || x["LEMBAGA PENDIDIKAN"]));
+
+    return normalized;
   }
 
-  function drawCharts(rawData) {
-    const countByYear = {};
-    rawData.forEach(d => { countByYear[d.Tahun] = (countByYear[d.Tahun]||0)+1; });
-    const years = Object.keys(countByYear).sort();
-    const vals = years.map(y=>countByYear[y]);
-    Plotly.react("trendChart", [{x:years, y:vals, type:"scatter", mode:"lines+markers"}], {margin:{t:10}});
-
-    const jenjangCount = {};
-    rawData.forEach(d => { jenjangCount[d["JENJANG PENDIDIKAN"]] = (jenjangCount[d["JENJANG PENDIDIKAN"]]||0)+1; });
-    Plotly.react("jenjangPie", [{labels:Object.keys(jenjangCount), values:Object.values(jenjangCount), type:"pie"}], {margin:{t:10}});
-
-    const unitCount = {};
-    rawData.forEach(d => { unitCount[d["UNIT KERJA"]] = (unitCount[d["UNIT KERJA"]]||0)+1; });
-    const units = Object.entries(unitCount).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    Plotly.react("unitBar", [{x:units.map(u=>u[1]), y:units.map(u=>u[0]), type:"bar", orientation:"h"}], {margin:{l:150,t:10}, yaxis:{autorange:"reversed"}});
-
-    const lembCount = {};
-    rawData.forEach(d => { lembCount[d["LEMBAGA PENDIDIKAN"]] = (lembCount[d["LEMBAGA PENDIDIKAN"]]||0)+1; });
-    const lemb = Object.entries(lembCount).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    Plotly.react("lembagaBar", [{x:lemb.map(l=>l[1]), y:lemb.map(l=>l[0]), type:"bar", orientation:"h"}], {margin:{l:150,t:10}, yaxis:{autorange:"reversed"}});
+  // ==== RENDER KPI & CHART ====
+  function renderKPIs(data) {
+    document.getElementById("kpiTotal").textContent   = data.length;
+    document.getElementById("kpiUnit").textContent    =
+      new Set(data.map(d => (d["UNIT KERJA"]||"").trim()).filter(Boolean)).size;
+    document.getElementById("kpiLembaga").textContent =
+      new Set(data.map(d => (d["LEMBAGA PENDIDIKAN"]||"").trim()).filter(Boolean)).size;
   }
 
-  loadAllData().then(updateDashboard).catch(e=>console.error(e));
+  function countBy(arr, key) {
+    const map = {};
+    for (const d of arr) {
+      const v = (d[key] || "").toString().trim();
+      if (!v) continue;
+      map[v] = (map[v] || 0) + 1;
+    }
+    return map;
+  }
+
+  function drawCharts(data) {
+    // 1) Program Studi → PIE
+    const prodiCount = countBy(data, "PROGRAM STUDI");
+    Plotly.react("prodiPie", [{
+      labels: Object.keys(prodiCount),
+      values: Object.values(prodiCount),
+      type: "pie"
+    }], { margin: { t: 10 } });
+
+    // 2) Jenjang Pendidikan → BAR
+    const jenjangCount = countBy(data, "JENJANG PENDIDIKAN");
+    const jLabels = Object.keys(jenjangCount);
+    const jVals   = jLabels.map(k => jenjangCount[k]);
+    Plotly.react("jenjangBar", [{
+      x: jLabels, y: jVals, type: "bar",
+      text: jVals.map(String), textposition: "outside",
+      hovertemplate: "%{x}<br>%{y} peserta<extra></extra>"
+    }], {
+      margin:{ t:10, r:10, b:40, l:50 },
+      xaxis:{ title:"Jenjang", tickangle:-15 },
+      yaxis:{ title:"Jumlah", rangemode:"tozero" },
+      uniformtext:{ minsize:10, mode:"hide" }
+    });
+
+    // 3) Lembaga Pendidikan → PIE
+    const lembCount = countBy(data, "LEMBAGA PENDIDIKAN");
+    Plotly.react("lembagaPie", [{
+      labels: Object.keys(lembCount),
+      values: Object.values(lembCount),
+      type: "pie"
+    }], { margin: { t: 10 } });
+
+    // 4) Keterangan → BAR (horizontal)
+    const ketCount = countBy(data, "KETERANGAN");
+    const kEntries = Object.entries(ketCount).sort((a,b)=>b[1]-a[1]);
+    Plotly.react("ketBar", [{
+      x: kEntries.map(e => e[1]),
+      y: kEntries.map(e => e[0]),
+      type: "bar", orientation: "h",
+      text: kEntries.map(e => e[1].toString()),
+      textposition: "outside",
+      hovertemplate: "%{y}<br>%{x} peserta<extra></extra>"
+    }], {
+      margin:{ l:160, t:10, r:20, b:30 },
+      yaxis:{ autorange:"reversed" },
+      xaxis:{ rangemode:"tozero" }
+    });
+  }
+
+  // ==== BOOTSTRAP ====
+  let fullData = []; // semua tahun
+  let currentData = [];
+
+  function setupFilter() {
+    const sel = document.getElementById("yearFilter");
+    const years = Array.from(new Set(fullData.map(d => d.Tahun).filter(Boolean))).sort();
+    sel.innerHTML = '<option value="All">Semua Tahun</option>' +
+      years.map(y => `<option value="${y}">${y}</option>`).join("");
+    sel.value = "All";
+
+    sel.onchange = () => {
+      const val = (sel.value ?? "").trim();
+      currentData = (val === "All" || val === "") ? fullData.slice()
+        : fullData.filter(d => String(d.Tahun).trim() === String(val));
+      renderKPIs(currentData);
+      drawCharts(currentData);
+    };
+  }
+
+  (async function init() {
+    try {
+      fullData = await loadAllData();
+      currentData = fullData.slice();
+
+      setupFilter();
+      renderKPIs(currentData);
+      drawCharts(currentData);
+
+      // OPTIONAL: auto-refresh tiap 10 menit
+      // setInterval(async () => {
+      //   fullData = await loadAllData();
+      //   document.getElementById("yearFilter").dispatchEvent(new Event('change'));
+      // }, 10*60*1000);
+
+    } catch (e) {
+      console.error(e);
+      alert("Gagal memuat data dari Google Sheets. Pastikan tab 2022–2025 dipublish & header konsisten.");
+    }
+  })();
   </script>
 </body>
 </html>
