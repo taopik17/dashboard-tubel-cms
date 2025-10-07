@@ -134,13 +134,32 @@
     let RAW = [];
 
     async function fetchCSV(url){
+      async function get(u){
+        const rsp = await fetch(u);
+        if(!rsp.ok) throw new Error("HTTP "+rsp.status);
+        return await rsp.text();
+      }
       if(!url || url.startsWith("PASTE_")){
         console.warn("Harap isi SHEET_CSV_URL.");
         return [];
       }
-      const text = await (await fetch(url)).text();
-      const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
-      return parsed.data;
+      try{
+        const text = await get(url);
+        const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+        if(parsed.data && parsed.data.length) return parsed.data;
+        throw new Error("Parsed empty");
+      }catch(err){
+        // Fallback CORS proxy yang read-only (r.jina.ai)
+        try{
+          const alt = "https://r.jina.ai/http://" + url.replace(/^https?:\/\//,"");
+          const text = await get(alt);
+          const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+          if(parsed.data && parsed.data.length) return parsed.data;
+        }catch(e){
+          console.error("Gagal fetch CSV:", e);
+        }
+        return [];
+      }
     }
 
     function getYears(data){
