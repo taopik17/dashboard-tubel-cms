@@ -65,7 +65,7 @@
     //    Contoh format:
     //    https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=YYYY&single=true&output=csv
     //    atau menggunakan opensheet: https://opensheet.elk.sh/<SPREADSHEET_ID>/Database
-    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vReB__nESTKX1GwAp2qFeogYRnlJY_5QQT4OAyPeo6pvCyClnWwchi3ocmwHYJcd7j4IIeQUrcv8miI/pub?gid=601260503&single=true&output=csv";
+    const SHEET_CSV_URL = "https://opensheet.elk.sh/1B9H4qfdjOgLVl7ZVk9FNvJF9D0Fy__IIvK8D5iAxATE/Database";
 
     // 2) Jika header kolom berbeda, ubah map di bawah ini.
     let COLS = {
@@ -134,25 +134,38 @@
     let RAW = [];
 
     async function fetchCSV(url){
-      async function get(u){
+      async function getText(u){
         const rsp = await fetch(u);
         if(!rsp.ok) throw new Error("HTTP "+rsp.status);
         return await rsp.text();
+      }
+      async function getJSON(u){
+        const rsp = await fetch(u);
+        if(!rsp.ok) throw new Error("HTTP "+rsp.status);
+        return await rsp.json();
       }
       if(!url || url.startsWith("PASTE_")){
         console.warn("Harap isi SHEET_CSV_URL.");
         return [];
       }
+      // Jika memakai OpenSheet (JSON)
+      if(url.includes("opensheet.elk.sh")){
+        try{
+          const json = await getJSON(url);
+          if(Array.isArray(json) && json.length){ return json; }
+        }catch(e){ console.error("Gagal fetch OpenSheet JSON:", e); }
+        return [];
+      }
+      // Default: CSV Google (dengan fallback proxy read-only)
       try{
-        const text = await get(url);
+        const text = await getText(url);
         const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
         if(parsed.data && parsed.data.length) return parsed.data;
         throw new Error("Parsed empty");
       }catch(err){
-        // Fallback CORS proxy yang read-only (r.jina.ai)
         try{
           const alt = "https://r.jina.ai/http://" + url.replace(/^https?:\/\//,"");
-          const text = await get(alt);
+          const text = await getText(alt);
           const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
           if(parsed.data && parsed.data.length) return parsed.data;
         }catch(e){
