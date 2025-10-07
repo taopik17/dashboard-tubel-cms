@@ -66,6 +66,7 @@
     //    https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=YYYY&single=true&output=csv
     //    atau menggunakan opensheet: https://opensheet.elk.sh/<SPREADSHEET_ID>/Database
     const SHEET_CSV_URL = "https://opensheet.elk.sh/1B9H4qfdjOgLVl7ZVk9FNvJF9D0Fy__IIvK8D5iAxATE/Database";
+    const SHEET_CSV_ALT = "https://docs.google.com/spreadsheets/d/e/2PACX-1vReB__nESTKX1GwAp2qFeogYRnlJY_5QQT4OAyPeo6pvCyClnWwchi3ocmwHYJcd7j4IIeQUrcv8miI/pub?gid=601260503&single=true&output=csv";
 
     // 2) Jika header kolom berbeda, ubah map di bawah ini.
     let COLS = {
@@ -153,7 +154,20 @@
         try{
           const json = await getJSON(url);
           if(Array.isArray(json) && json.length){ return json; }
-        }catch(e){ console.error("Gagal fetch OpenSheet JSON:", e); }
+        }catch(e){ console.error("Gagal fetch OpenSheet JSON:", e);
+        // Coba ALT (CSV publish-to-web) bila tersedia
+        if (typeof SHEET_CSV_ALT === 'string' && SHEET_CSV_ALT) {
+          try {
+            const text = await getText(SHEET_CSV_ALT);
+            const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+            if(parsed.data && parsed.data.length) return parsed.data;
+            // fallback proxy
+            const alt2 = "https://r.jina.ai/http://" + SHEET_CSV_ALT.replace(/^https?:\/\//,"");
+            const text2 = await getText(alt2);
+            const parsed2 = Papa.parse(text2, {header:true, skipEmptyLines:true});
+            if(parsed2.data && parsed2.data.length) return parsed2.data;
+          } catch(ex) { console.error("ALT CSV juga gagal:", ex); }
+        }
         return [];
       }
       // Default: CSV Google (dengan fallback proxy read-only)
